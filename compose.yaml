@@ -1,0 +1,19 @@
+name: rss-telegram-topics
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.orb
+    image: rss-telegram-topics:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TOKEN: ${TOKEN:?Set TOKEN in .env}
+      MANAGER: ${MANAGER:?Set MANAGER in .env}
+    volumes:
+      - ./config:/app/config
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'

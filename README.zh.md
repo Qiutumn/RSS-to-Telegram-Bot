@@ -3,6 +3,9 @@
 </p>
 <h1 align="center">RSS to Telegram Bot</h1>
 
+本 fork 增加 **Telegram 群组话题订阅与推送**，支持同一 RSS 在不同话题独立管理。
+用法、迁移和本地 OrbStack 部署见 [话题功能说明](docs/forum-topics.zh.md)。
+
 <p align="center"><b>关心你的阅读体验的 Telegram RSS 机器人</b></p>
 
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/Rongronggg9/RSS-to-Telegram-Bot?logo=git&label=commit)](https://github.com/Rongronggg9/RSS-to-Telegram-Bot/commits)

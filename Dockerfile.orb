@@ -1,0 +1,8 @@
+# Reuse the upstream dependency environment; package only this fork's application.
+FROM rongronggg9/rss-to-telegram:dev@sha256:75d000bdadf8f9934a4467e2e9a03f0d5671fa6d2e7f8299064ae82ecf64f90f
+WORKDIR /app
+COPY src /app/src
+COPY telegramRSSbot.py LICENSE /app/
+COPY scripts/health_check.py /app/health_check.py
+ARG BUILD_VERSION=forum-topics-local
+RUN printf '%s\n' "$BUILD_VERSION" > /app/.version

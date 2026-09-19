@@ -30,6 +30,7 @@ try:
 except ImportError:
     from zlib import crc32
 
+from ...topics import topic_filter
 from ... import db, log, env
 from ...i18n import i18n
 
@@ -160,7 +161,7 @@ async def get_sub_list_by_page(user_id: int, page_number: int, size: int, desc: 
         # raise IndexError('Page number must be positive.')
         page_number = 1
 
-    sub_count = await db.Sub.filter(user=user_id, *args, **kwargs).count()
+    sub_count = await db.Sub.filter(user=user_id, *args, **(topic_filter(user_id) | kwargs)).count()
     if sub_count == 0:
         return 0, 0, [], 0
 
@@ -168,7 +169,7 @@ async def get_sub_list_by_page(user_id: int, page_number: int, size: int, desc: 
     page_number = min(page_number, page_count)
 
     offset = (page_number - 1) * size
-    page = await db.Sub.filter(user=user_id, *args, **kwargs) \
+    page = await db.Sub.filter(user=user_id, *args, **(topic_filter(user_id) | kwargs)) \
         .order_by('-id' if desc else 'id') \
         .limit(size) \
         .offset(offset) \
@@ -306,15 +307,15 @@ async def update_interval(feed: Union[db.Feed, db.Sub, int]):
 
 
 async def list_sub(user_id: int, *args, **kwargs) -> list[db.Sub]:
-    return await db.Sub.filter(user=user_id, *args, **kwargs).prefetch_related('feed')
+    return await db.Sub.filter(user=user_id, *args, **(topic_filter(user_id) | kwargs)).prefetch_related('feed')
 
 
 async def count_sub(user_id: int, *args, **kwargs) -> int:
-    return await db.Sub.filter(user=user_id, *args, **kwargs).count()
+    return await db.Sub.filter(user=user_id, *args, **(topic_filter(user_id) | kwargs)).count()
 
 
 async def have_subs(user_id: int) -> bool:
-    return await db.Sub.filter(user=user_id).exists()
+    return await db.Sub.filter(user=user_id, **topic_filter(user_id)).exists()
 
 
 async def check_sub_limit(user_id: int, force_count_current: bool = False) -> tuple[bool, int, int, bool]:
@@ -334,7 +335,7 @@ async def check_sub_limit(user_id: int, force_count_current: bool = False) -> tu
             is_default_limit = True
 
     if force_count_current or limit >= 0:
-        curr_count = await count_sub(user_id)
+        curr_count = await db.Sub.filter(user_id=user_id).count()  # limit is chat-wide
 
     return curr_count >= limit >= 0, curr_count, limit, is_default_limit
 
@@ -380,7 +381,7 @@ async def activate_or_deactivate_sub(user_id: int, sub: Union[db.Sub, int], acti
     :return: the updated sub, `None` if the sub does not exist
     """
     if isinstance(sub, int):
-        sub = await db.Sub.get_or_none(id=sub, user_id=user_id)
+        sub = await db.Sub.get_or_none(id=sub, user_id=user_id, **topic_filter(user_id))
         if not sub:
             return None
     elif sub.user_id != user_id:

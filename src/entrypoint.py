@@ -42,6 +42,7 @@ from telethon.tl import types
 from random import sample
 
 from . import log, db, command
+from .topics import REMOTE_TARGET_PATTERN, CALLBACK_TARGET_PATTERN
 from .monitor import Monitor
 from .i18n import i18n, ALL_LANGUAGES, get_commands_list
 from .parsing import tgraph
@@ -122,7 +123,7 @@ async def pre():
     # wait for pre tasks
     await asyncio.gather(*pre_tasks)
 
-    bare_target_matcher = r'(?P<target>@\w{4,}|(-100|\+)\d+)'
+    bare_target_matcher = REMOTE_TARGET_PATTERN
     target_matcher = rf'(\s+{bare_target_matcher})?'
     _command_matcher = r'(?P<command>{}(?=[\s@]|$))(@\w+)?'
     construct_command_matcher = _command_matcher.format
@@ -150,7 +151,7 @@ async def pre():
     bot.add_event_handler(command.customization.cmd_set_default,
                           events.NewMessage(pattern=construct_remote_command_matcher('/set_default')))
     bot.add_event_handler(command.opml.opml_import,
-                          command.utils.NewFileMessage(pattern=rf'.*?{bare_target_matcher}?',
+                          command.utils.NewFileMessage(pattern=rf'.*?(?:{bare_target_matcher})?',
                                                        filename_pattern=r'^.*\.opml$'))
     bot.add_event_handler(command.misc.cmd_start,
                           events.NewMessage(pattern=construct_command_matcher('/start')))
@@ -186,7 +187,7 @@ async def pre():
                           events.NewMessage(
                               pattern=inline_query_matcher + construct_remote_command_matcher('/set_hashtags')))
 
-    callback_target_matcher = r'(%(?P<target>\+?\d+))?'
+    callback_target_matcher = CALLBACK_TARGET_PATTERN
     # callback query handler
     bot.add_event_handler(command.misc.callback_del_buttons,  # delete buttons
                           events.CallbackQuery(pattern='^del_buttons$'))

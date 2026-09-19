@@ -25,6 +25,7 @@ from traceback import format_exc
 
 from ._common import logger, TIMEOUT
 from ._stat import NotifierStat
+from ..topics import TOPIC_ERRORS
 from .. import db, env, web
 from ..command import inner
 from ..command.utils import default_leave_chat_helper, escape_html
@@ -35,6 +36,7 @@ from ..helpers.pipeline import SameFuncPipelineContextManager, StopPipeline
 from ..helpers.timeout import BatchTimeout
 from ..i18n import i18n
 from ..parsing.post import get_post_from_entry, Post
+from ..parsing.message import MessageDispatcher
 
 null_ctx_obj: Final[nullcontext] = nullcontext()
 
@@ -58,6 +60,7 @@ class Notifier:
             raise ValueError('entries and reason cannot be set at the same time')
         self._feed: Final[db.Feed] = feed
         self._subs: Final[set[db.Sub]] = set(subs)
+        self._unavailable_topics: set[tuple[int, int]] = set()
         self._entries: Final[Optional[Sequence[MutableMapping]]] = entries
         self._reason: Final[Optional[Union[web.WebError, str]]] = reason
         self._on_blocked_cb: Callable[[hints.EntityLike], Awaitable[None]] = on_blocked_cb
@@ -272,6 +275,8 @@ class Notifier:
 
     async def _send(self, sub: db.Sub, post: Union[str, Post]) -> None:
         user_id = sub.user_id
+        if (user_id, sub.topic_id) in self._unavailable_topics:
+            return
         try:
             try:
                 await env.bot.get_input_entity(user_id)  # verify that the input entity can be gotten first
@@ -282,7 +287,8 @@ class Notifier:
                 )
             try:
                 if isinstance(post, str):
-                    await env.bot.send_message(user_id, post, parse_mode='html', silent=not sub.notify)
+                    await MessageDispatcher(user_id, html=post, silent=not sub.notify,
+                                            topic_id=sub.topic_id).send_messages()
                     return None
                 await post.send_formatted_post_according_to_sub(sub)
                 if self._user_blocked_counter[user_id]:  # reset the counter if success
@@ -290,8 +296,15 @@ class Notifier:
             except UserBlockedErrors as e:
                 return await self._on_blocked(user_id=user_id, err_msg=type(e).__name__)
             except BadRequestError as e:
-                if e.message == 'TOPIC_CLOSED':
-                    return await self._on_blocked(user_id=user_id, err_msg=e.message)
+                if e.message in TOPIC_ERRORS:
+                    # Only pause this destination. Never leave the group or affect sibling topics.
+                    self._unavailable_topics.add((user_id, sub.topic_id))
+                    affected = await db.Sub.filter(user_id=user_id, topic_id=sub.topic_id).values_list('feed_id', flat=True)
+                    await db.Sub.filter(user_id=user_id, topic_id=sub.topic_id).update(state=0)
+                    await asyncio.gather(*(inner.utils.update_interval(feed_id) for feed_id in set(affected)))
+                    logger.warning(f'Paused subscriptions in {user_id}, topic {sub.topic_id}: {e.message}')
+                    return
+                raise
         except Exception as e:
             logger.error(f'Failed to send {post.link} (feed: {post.feed_link}, user: {sub.user_id}):', exc_info=e)
             try:

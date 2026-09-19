@@ -25,6 +25,7 @@ from telethon.tl import types
 from telethon.tl.patched import Message
 
 from .. import env, db
+from ..topics import topic_filter
 from ..compat import bozo_exception_removal_wrapper
 from ..aio_helper import run_async
 from ..i18n import i18n
@@ -162,7 +163,7 @@ async def opml_import(
             elif sum(sub.title is not None for sub in subs
                      if sub.id in range(curr_start, curr_id + 1)):  # if any sub has custom title
                 subs_between_w_title_count = await db.Sub.filter(
-                    user_id=chat_id,
+                    user_id=chat_id, **topic_filter(chat_id),
                     id__in=(curr_id + 1, next_id - 1),
                     title__not_isnull=True,
                 ).count()

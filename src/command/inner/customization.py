@@ -22,6 +22,7 @@ from itertools import chain
 from telethon import Button
 from telethon.tl.types import KeyboardButtonCallback
 
+from ...topics import subscription_target
 from ... import db, env
 from ...i18n import i18n
 from .utils import arrange_grid, update_interval, activate_or_deactivate_sub, formatting_time, logger, \
@@ -268,7 +269,7 @@ async def get_customization_buttons(sub_or_user: Union[db.Sub, db.User],
             Button.switch_inline(
                 f"{i18n[lang]['set_custom_title_button']}",
                 query=(
-                    f'/set_title {sub_or_user.user_id} {sub_or_user.id} '
+                    f'/set_title {subscription_target(sub_or_user)} {sub_or_user.id} '
                     if tail
                     else f'/set_title {sub_or_user.id} '
                 ),
@@ -277,7 +278,7 @@ async def get_customization_buttons(sub_or_user: Union[db.Sub, db.User],
             Button.switch_inline(
                 f"{i18n[lang]['set_custom_hashtags_button']}",
                 query=(
-                    f'/set_hashtags {sub_or_user.user_id} {sub_or_user.id} '
+                    f'/set_hashtags {subscription_target(sub_or_user)} {sub_or_user.id} '
                     if tail
                     else f'/set_hashtags {sub_or_user.id} '
                 ),
@@ -349,7 +350,7 @@ async def get_set_interval_buttons(sub_or_user: Union[db.Sub, int],
                                               if tail
                                               else '/set_interval default ')
                                              if is_user else
-                                             (f'/set_interval {sub_or_user.user_id} {sub_or_user.id} '
+                                             (f'/set_interval {subscription_target(sub_or_user)} {sub_or_user.id} '
                                               if tail
                                               else f'/set_interval {sub_or_user.id} ')),
                                       same_peer=True),

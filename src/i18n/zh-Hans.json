@@ -234,6 +234,6 @@
         "cmd_description_test": "测试 (仅 bot 管理员)",
         "cmd_description_set_option": "更改 bot 配置 (仅 bot 管理员)",
         "cmd_description_user_info": "查看/修改用户信息 (仅 bot 管理员)",
-        "usage_in_channel_or_group_prompt_html": "<b>在频道/群组里的使用方式:</b>\n1. 将 bot 添加到频道/群组里。\n2a. 直接<b>在频道/群组里</b>发送命令。\n2b. 或者，你也可以<b>在和 bot 的私聊里</b>像这样发送命令: <code>/sub @username https://example.com</code> 或 <code>/sub -10010000000000 https://example.com</code>。\n(<code>@username</code> 是频道/群组的用户名，<code>@</code> 是不可缺少的；<code>-10010000000000</code> 是频道/群组的 ID，必须以 <code>-100</code> 开头)"
+        "usage_in_channel_or_group_prompt_html": "<b>在频道/群组里的使用方式:</b>\n1. 将 bot 添加到频道/群组里。\n2a. 直接<b>在频道/群组里</b>发送命令。\n2b. 或者，你也可以<b>在和 bot 的私聊里</b>像这样发送命令: <code>/sub @username https://example.com</code> 或 <code>/sub -10010000000000 https://example.com</code>。\n(<code>@username</code> 是频道/群组的用户名，<code>@</code> 是不可缺少的；<code>-10010000000000</code> 是频道/群组的 ID，必须以 <code>-100</code> 开头)\n\n<b>话题群组：</b>在目标话题中发送 /sub 即可订阅到该话题。/list、/unsub、/set、/import 和 /export 只操作当前话题。私聊管理可用 <code>/sub -10010000000000:42 https://example.com/rss</code>（42 是话题 ID）。/set_default 仍修改整个群组的默认设置。"
     }
 }

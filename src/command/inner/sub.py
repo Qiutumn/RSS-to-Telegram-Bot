@@ -28,6 +28,7 @@ from cachetools import TTLCache
 from os import path
 
 from ... import db, web, env
+from ...topics import current_topic_id, topic_filter
 from ...aio_helper import run_async
 from ...i18n import i18n
 from .utils import update_interval, list_sub, filter_urls, logger, escape_html, \
@@ -62,7 +63,7 @@ async def sub(user_id: int,
         created_new_sub = False
 
         if feed:
-            _sub = await db.Sub.get_or_none(user=user_id, feed=feed)
+            _sub = await db.Sub.get_or_none(user=user_id, feed=feed, topic_id=current_topic_id(user_id))
         if not feed or feed.state == 0:
             wf = await web.feed_get(feed_url, verbose=False)
             rss_d = wf.rss_d
@@ -112,7 +113,7 @@ async def sub(user_id: int,
 
         if not _sub:  # create a new sub if needed
             _sub, created_new_sub = await db.Sub.get_or_create(
-                user_id=user_id, feed=feed,
+                user_id=user_id, feed=feed, topic_id=current_topic_id(user_id),
                 defaults={
                     'title': sub_title if sub_title else None,
                     'interval': None,
@@ -221,9 +222,9 @@ async def unsub(user_id: int, feed_url: str = None, sub_id: int = None, lang: Op
     try:
         if feed_url:
             feed: db.Feed = await db.Feed.get_or_none(link=feed_url)
-            sub_to_delete: Optional[db.Sub] = await feed.subs.filter(user=user_id).first() if feed else None
+            sub_to_delete: Optional[db.Sub] = await feed.subs.filter(user=user_id, **topic_filter(user_id)).first() if feed else None
         else:  # elif sub_id:
-            sub_to_delete: db.Sub = await db.Sub.get_or_none(id=sub_id, user=user_id).prefetch_related('feed')
+            sub_to_delete: db.Sub = await db.Sub.get_or_none(id=sub_id, user=user_id, **topic_filter(user_id)).prefetch_related('feed')
             feed: Optional[db.Feed] = await sub_to_delete.feed if sub_to_delete else None
 
         if sub_to_delete is None or feed is None:
@@ -290,7 +291,7 @@ async def unsubs(user_id: int,
 
 async def unsub_all(user_id: int, lang: Optional[str] = None) \
         -> Optional[dict[str, Union[dict[str, Union[int, str, db.Sub, None]], str]]]:
-    user_sub_list = await db.Sub.filter(user=user_id).values_list('id', flat=True)
+    user_sub_list = await db.Sub.filter(user=user_id, **topic_filter(user_id)).values_list('id', flat=True)
     return await unsubs(user_id, sub_ids=user_sub_list, lang=lang) if user_sub_list else None
 
 
@@ -346,7 +347,7 @@ async def migrate_to_new_url(feed: db.Feed, new_url: str) -> Union[bool, db.Feed
     # migrate all subs to the new feed
     tasks_migrate = []
     async for exist_sub in feed.subs:
-        if await db.Sub.filter(feed=new_url_feed, user_id=exist_sub.user_id).exists():
+        if await db.Sub.filter(feed=new_url_feed, user_id=exist_sub.user_id, topic_id=exist_sub.topic_id).exists():
             continue  # sub already exists, skip it, delete cascade later
         exist_sub.feed = new_url_feed
         tasks_migrate.append(env.loop.create_task(exist_sub.save()))

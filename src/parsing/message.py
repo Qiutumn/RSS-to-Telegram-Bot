@@ -41,7 +41,8 @@ class MessageDispatcher:
                  html: Optional[str] = None,
                  media: Optional[Media] = None,
                  link_preview: bool = False,
-                 silent: bool = False):
+                 silent: bool = False,
+                 topic_id: int = 0):
         if not any((html, media)):
             raise ValueError('At least one of html or media must be specified')
         self.user_id = user_id
@@ -50,6 +51,7 @@ class MessageDispatcher:
         self.media = media
         self.link_preview = link_preview
         self.silent = silent
+        self.topic_id = topic_id
 
         self.messages: list[Message] = []
 
@@ -83,12 +85,13 @@ class MessageDispatcher:
             else:
                 media = media_type = None
             message = Message(self.user_id, plain_text, format_entities, media, media_type, self.link_preview,
-                              self.silent)
+                              self.silent, topic_id=self.topic_id)
             self.messages.append(message)
 
         while media_and_types:
             media, media_type = media_and_types.pop(0)
-            message = Message(self.user_id, None, None, media, media_type, self.link_preview, self.silent)
+            message = Message(self.user_id, None, None, media, media_type, self.link_preview,
+                              self.silent, topic_id=self.topic_id)
             self.messages.append(message)
 
     async def send_messages(self):
@@ -98,7 +101,9 @@ class MessageDispatcher:
         try:
             async with self.user_sending_lock[self.user_id]:
                 for message in self.messages:
-                    msg = await message.send(reply_to=sent_msgs[-1] if sent_msgs else None)
+                    # Each forum chunk replies to its root, including media fallback/retries.
+                    reply_to = self.topic_id or (sent_msgs[-1] if sent_msgs else None)
+                    msg = await message.send(reply_to=reply_to)
                     if msg:
                         sent_msgs.extend(msg) if isinstance(msg, list) else sent_msgs.append(msg)
         except MediaSendFailErrors as e:
@@ -123,7 +128,8 @@ class Message:
                  media: Optional[Union[Sequence[TypeMessageMedia], TypeMessageMedia]] = None,
                  media_type: Optional[TypeMessage] = None,
                  link_preview: bool = False,
-                 silent: bool = False):
+                 silent: bool = False,
+                 topic_id: int = 0):
         self.user_id = user_id
         self.plain_text = plain_text
         self.format_entities = format_entities
@@ -131,6 +137,7 @@ class Message:
         self.media_type = media_type
         self.link_preview = link_preview
         self.silent = silent
+        self.topic_id = topic_id
         self.tries = 0
 
         self.attributes = (
@@ -167,7 +174,7 @@ class Message:
                             reply_to = get_message_id(reply_to)
                             request = functions.messages.SendMultiMediaRequest(
                                 entity,
-                                reply_to=None if reply_to is None else types.InputReplyToMessage(reply_to),
+                                reply_to=None if reply_to is None else types.InputReplyToMessage(reply_to, top_msg_id=self.topic_id or None),
                                 multi_media=media,
                                 silent=self.silent
                             )
@@ -175,6 +182,25 @@ class Message:
                             random_ids = [m.random_id for m in media]
                             return env.bot._get_response_message(random_ids, result, entity)
                         # non-album
+                        if self.topic_id:
+                            # Telethon's convenience methods omit top_msg_id. Keep an explicit
+                            # root on every request so a missing reply cannot fall back to General.
+                            entity = await env.bot.get_input_entity(self.user_id)
+                            topic_reply = types.InputReplyToMessage(
+                                reply_to_msg_id=self.topic_id, top_msg_id=self.topic_id)
+                            if self.media is not None:
+                                _, media, _ = await env.bot._file_to_media(
+                                    self.media, attributes=self.attributes)
+                                request = functions.messages.SendMediaRequest(
+                                    peer=entity, media=media, message=self.plain_text or '',
+                                    entities=self.format_entities, reply_to=topic_reply, silent=self.silent)
+                            else:
+                                request = functions.messages.SendMessageRequest(
+                                    peer=entity, message=self.plain_text,
+                                    entities=self.format_entities, reply_to=topic_reply,
+                                    no_webpage=not self.link_preview, silent=self.silent)
+                            result = await env.bot(request)
+                            return env.bot._get_response_message(request, result, entity)
                         return await env.bot.send_message(entity=self.user_id,
                                                           message=self.plain_text,
                                                           formatting_entities=self.format_entities,

@@ -23,6 +23,7 @@ from . import inner, misc
 from .types import *
 from .utils import command_gatekeeper, parse_customization_callback_data, parse_callback_data_with_page, \
     escape_html, parse_command_get_sub_or_user_and_param, get_callback_tail
+from ..topics import topic_filter
 from .. import db, env
 from ..i18n import i18n
 
@@ -95,7 +96,7 @@ async def callback_set(
     sub_or_user: Union[db.Sub, db.User] = await (
         db.User.get_or_none(id=chat_id)
         if set_user_default
-        else db.Sub.get_or_none(id=sub_id, user=chat_id).prefetch_related('feed', 'user')
+        else db.Sub.get_or_none(id=sub_id, user=chat_id, **topic_filter(chat_id)).prefetch_related('feed', 'user')
     )
     if sub_or_user is None:
         await event.edit(i18n[lang]['subscription_not_exist'])
@@ -201,7 +202,7 @@ async def callback_reset(
     chat_id = chat_id or event.chat_id
     callback_tail = get_callback_tail(event, chat_id)
     sub_id, _, _, page = parse_customization_callback_data(event.data)
-    sub = await db.Sub.get_or_none(id=sub_id, user=chat_id)
+    sub = await db.Sub.get_or_none(id=sub_id, user=chat_id, **topic_filter(chat_id))
     if sub is None:
         await event.answer(i18n[lang]['subscription_not_exist'])
         return
@@ -251,7 +252,7 @@ async def callback_reset_all(
         **__,
 ):  # callback data = reset_all
     chat_id = chat_id or event.chat_id
-    subs = await db.Sub.filter(user=chat_id)
+    subs = await db.Sub.filter(user=chat_id, **topic_filter(chat_id))
     tasks = []
     for sub in subs:
         if sub.interval is not None:
@@ -385,7 +386,7 @@ async def callback_del_subs_title(
         id_range = id_range_str.split('-')
         id_start = int(id_range[0])
         id_end = int(id_range[1])
-        subs.extend(await db.Sub.filter(user_id=chat_id, id__range=(id_start, id_end)).all())
+        subs.extend(await db.Sub.filter(user_id=chat_id, **topic_filter(chat_id), id__range=(id_start, id_end)).all())
     await inner.customization.del_subs_title(subs)
     await misc.callback_del_buttons.__wrapped__(event)
 

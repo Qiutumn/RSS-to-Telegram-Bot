@@ -17,6 +17,7 @@
 from __future__ import annotations
 from typing import Optional
 
+from ..topics import current_topic_id
 from .. import db
 from ..errors_collection import MediaSendFailErrors
 from .utils import parse_entry, logger, Enclosure
@@ -83,6 +84,7 @@ class Post:
         user: db.User = sub.user
         await self.send_formatted_post(
             user_id=sub.user_id,
+            topic_id=sub.topic_id,
             sub_title=sub.title,
             tags=sub.tags.split(' ') if sub.tags else [],
             send_mode=sub.send_mode if sub.send_mode != -100 else user.send_mode,
@@ -110,7 +112,8 @@ class Post:
                                   display_entry_tags: int = -1,
                                   style: int = 0,
                                   display_media: int = 0,
-                                  silent: bool = False):
+                                  silent: bool = False,
+                                  topic_id: int = 0):
         """
         Send formatted post.
 
@@ -154,7 +157,8 @@ class Post:
                                                        html=formatted_post,
                                                        media=self.post_formatter.media if need_media else None,
                                                        link_preview=need_link_preview,
-                                                       silent=silent)
+                                                       silent=silent,
+                                                       topic_id=topic_id)
 
                 return await message_dispatcher.send_messages()
             except MediaSendFailErrors as e:
@@ -187,13 +191,14 @@ class Post:
                 raise SystemExit(self.feed_link, self.feed_title, self.link, self.title) from e
 
     async def test_format(self, user_id: int):
-        sub = await db.Sub.filter(feed__link=self.feed_link, user_id=user_id).get_or_none()
+        sub = await db.Sub.filter(feed__link=self.feed_link, user_id=user_id, topic_id=current_topic_id(user_id)).get_or_none()
         if sub is None:
             user = await db.User.get_or_none(id=user_id)
             if user is None:
-                return await self.send_formatted_post(user_id=user_id)
+                return await self.send_formatted_post(user_id=user_id, topic_id=current_topic_id(user_id))
             return await self.send_formatted_post(
                 user_id=user_id,
+                topic_id=current_topic_id(user_id),
                 send_mode=user.send_mode,
                 length_limit=user.length_limit,
                 link_preview=user.link_preview,

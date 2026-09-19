@@ -36,6 +36,7 @@ from telethon.errors import (
 )
 
 from .. import env, log, db, locks, errors_collection
+from ..topics import current_topic_id, topic_filter, topic_scope, message_topic_id, normalize_topic_id, TOPIC_ERRORS
 from ..i18n import i18n
 from . import inner
 from .types import *
@@ -79,7 +80,7 @@ async def parse_command_get_sub_or_user_and_param(
         sub_or_user = await db.User.get_or_none(id=user_id)
     if len(args) >= 2 and args[1].isdecimal() and int(args[1]) >= 1:
         sub_id = int(args[1])
-        sub_or_user = await db.Sub.get_or_none(id=sub_id, user_id=user_id)
+        sub_or_user = await db.Sub.get_or_none(id=sub_id, user_id=user_id, **topic_filter(user_id))
     if len(args) > 2:
         param = args[2]
     return sub_or_user, param
@@ -249,6 +250,47 @@ async def deactivate_all_and_leave_chat(user_id: hints.EntityLike):
 default_leave_chat_helper: Final = deactivate_all_and_leave_chat
 
 
+async def execute_in_topic(event, destination_id, func, *args, **kwargs):
+    """Apply command scope only after the gatekeeper has verified chat permissions."""
+    match = getattr(event, 'pattern_match', None)
+    groups = match.groupdict() if match else {}
+    explicit_topic = groups.get('topic')
+    remote = bool(groups.get('target'))
+    is_callback = isinstance(event, TypeEventCb)
+    message = await event.get_message() if is_callback else getattr(event, 'message', None)
+    if is_callback and event.is_group and message is None:
+        await event.answer('Message unavailable; send the command again.', alert=True)
+        return
+    topic_id = 0 if remote else message_topic_id(message)
+    if explicit_topic is not None:
+        try:
+            topic_id = normalize_topic_id(int(explicit_topic))
+        except ValueError:
+            await respond_or_answer(event, 'Invalid topic ID.')
+            return
+        chat = await env.bot.get_entity(destination_id)
+        if not getattr(chat, 'forum', False):
+            await respond_or_answer(event, 'The target must be a forum supergroup.')
+            return
+        if topic_id:
+            # Bots cannot call getForumTopicsByID; validate the topic's root service message.
+            root = await env.bot.get_messages(destination_id, ids=topic_id)
+            if not isinstance(getattr(root, 'action', None), types.MessageActionTopicCreate):
+                await respond_or_answer(event, 'Topic not found. Send /sub inside the target topic.')
+                return
+
+    original_respond = getattr(event, 'respond', None)
+    local_topic = message_topic_id(message)
+    if local_topic and original_respond:
+        event.respond = partial(original_respond, reply_to=local_topic)
+    try:
+        with topic_scope(destination_id, topic_id):
+            return await func(event, *args, **kwargs)
+    finally:
+        if original_respond:
+            event.respond = original_respond
+
+
 def command_gatekeeper(
         func: Optional[Callable] = None,
         *,
@@ -377,7 +419,7 @@ def command_gatekeeper(
                 async with locks.ContextWithTimeout(flood_lock, timeout=timeout):
                     pass  # wait for flood wait
                 await asyncio.wait_for(
-                    func(event, *args, lang=lang, chat_id=chat_id, **kwargs),  # execute the command!
+                    execute_in_topic(event, chat_id, func, *args, lang=lang, chat_id=chat_id, **kwargs),
                     timeout=timeout,
                 )
             except locks.ContextTimeoutError:
@@ -671,8 +713,8 @@ def command_gatekeeper(
                     await respond_or_answer(event, 'ERROR: ' + i18n[lang]['message_too_long_prompt'])
                 elif isinstance(e, errors_collection.UserBlockedErrors):
                     await default_leave_chat_helper(chat_id)
-                elif isinstance(e, BadRequestError) and e.message == 'TOPIC_CLOSED':
-                    await default_leave_chat_helper(chat_id)
+                elif isinstance(e, BadRequestError) and e.message in TOPIC_ERRORS:
+                    logger.warning(f'Topic unavailable in chat {chat_id}: {e.message}; keeping other subscriptions')
                 else:
                     await respond_or_answer(event, 'ERROR: ' + i18n[lang]['uncaught_internal_error'])
             except (FloodError, MessageNotModifiedError, locks.ContextTimeoutError):
@@ -931,7 +973,9 @@ def get_callback_tail(
     ori_chat_id, peer_type = resolve_id(chat_id)
     if peer_type is types.PeerChat:
         raise ValueError('Old-fashioned group chat is not supported')
-    return f'%{ori_chat_id}' if ori_chat_id < 0 else f'%+{ori_chat_id}'
+    tail = f'%{abs(ori_chat_id)}' if peer_type is types.PeerChannel else f'%+{ori_chat_id}'
+    topic_id = current_topic_id(chat_id)
+    return f'{tail}:{topic_id}' if topic_id else tail
 
 
 async def check_sub_limit(event: TypeEventMsgHint, user_id: int, lang: Optional[str] = None):

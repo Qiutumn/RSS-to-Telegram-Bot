@@ -146,6 +146,7 @@ class Sub(Model, Base):
         on_delete=fields.CASCADE,
     )
     user_id: int  # type hint stub
+    topic_id = fields.IntField(default=0, description='Forum topic ID; 0 means General or a non-forum chat')
     feed: fields.ForeignKeyRelation['Feed'] = fields.ForeignKeyField(
         'models.Feed',
         related_name='subs',
@@ -211,7 +212,7 @@ class Sub(Model, Base):
 
     class Meta:
         table = 'sub'
-        unique_together = ('user_id', 'feed_id')  # will also be indexed
+        unique_together = ('user_id', 'feed_id', 'topic_id')  # will also be indexed
 
 
 class Option(Model, Base):

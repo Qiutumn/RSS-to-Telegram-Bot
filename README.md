@@ -3,6 +3,11 @@
 </p>
 <h1 align="center">RSS to Telegram Bot</h1>
 
+This fork adds **Telegram forum topic subscriptions and delivery**, including independent
+subscriptions to the same feed in different topics. Send `/sub` inside a topic, or use
+`/sub -1001234567890:42 https://example.com/rss` in a private chat with the bot.
+See the [topic and OrbStack deployment guide](docs/forum-topics.zh.md).
+
 <p align="center"><b>A Telegram RSS bot that cares about your reading experience</b></p>
 
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/Rongronggg9/RSS-to-Telegram-Bot?logo=git&label=commit)](https://github.com/Rongronggg9/RSS-to-Telegram-Bot/commits)

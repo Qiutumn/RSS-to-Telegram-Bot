@@ -1,0 +1,12 @@
+*
+!src/
+!src/**
+!telegramRSSbot.py
+!LICENSE
+!scripts/
+!scripts/health_check.py
+!Dockerfile.orb
+!Dockerfile
+!requirements.txt
+**/__pycache__
+**/*.pyc
